@@ -2,6 +2,7 @@
 #include "drivers/framebuffer.h"
 #include "drivers/serial.h"
 #include "idt.h"
+#include "pic.h"
 
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 
@@ -20,6 +21,9 @@ void kmain(uint32_t magic, uint32_t mbi_address)
 
     serial_initialize();
     idt_install();
+    pic_remap();
+    pic_clear_mask(1);  // Unmask keyboard IRQ
+    __asm__ volatile ("sti");  // Enable CPU interrupts
 
     serial_write(
         0x3F8,

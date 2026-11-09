@@ -286,6 +286,34 @@ static void fb_scroll(void)
     cursor_col = 0;
 }
 
+void fb_backspace(void)
+{
+    // Nothing to erase at the beginning of the screen.
+    if (cursor_row == 0 && cursor_col == 0)
+        return;
+
+    // Move to the previous character position.
+    if (cursor_col == 0) {
+        cursor_row--;
+        cursor_col = FB_WIDTH - 1;
+    } else {
+        cursor_col--;
+    }
+
+    // Erase the character.
+    fb_write_cell(
+        cursor_row * FB_WIDTH + cursor_col,
+        ' ',
+        FB_WHITE,
+        FB_BLACK
+    );
+
+    // Update VGA hardware cursor.
+    if (fb_backend == FB_BACKEND_VGA) {
+        fb_move_cursor(cursor_row * FB_WIDTH + cursor_col);
+    }
+}
+
 int fb_write(char *buf, unsigned int len)
 {
     if (!buf)

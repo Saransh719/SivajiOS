@@ -21,6 +21,8 @@ void fb_move_cursor(unsigned short pos);
 
 void fb_move_cursor(unsigned short pos);
 
+void fb_backspace(void);
+
 int fb_write(char *buf, unsigned int len);
 
 void fb_write_cell(

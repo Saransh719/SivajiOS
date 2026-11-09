@@ -23,7 +23,9 @@ BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
                $(BIOS_DIR)/interrupt_c.o \
                $(BIOS_DIR)/framebuffer.o \
                $(BIOS_DIR)/io.o \
-               $(BIOS_DIR)/serial.o
+               $(BIOS_DIR)/serial.o \
+			   $(BIOS_DIR)/pic.o \
+			   $(BIOS_DIR)/keyboard.o \
 
 
 UEFI_OBJECTS = $(UEFI_DIR)/entry.o $(UEFI_DIR)/kmain.o $(UEFI_DIR)/framebuffer.o
@@ -85,6 +87,15 @@ $(BIOS_DIR)/interrupt.o: interrupt.s
 
 # Compile C interrupt handler
 $(BIOS_DIR)/interrupt_c.o: interrupt.c interrupt.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+# Compile PIC driver
+$(BIOS_DIR)/pic.o: pic.c pic.h io/io.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/keyboard.o: keyboard.c keyboard.h keyboard_map.h io/io.h drivers/framebuffer.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
