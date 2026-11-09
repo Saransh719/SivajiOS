@@ -17,6 +17,10 @@ BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
                $(BIOS_DIR)/kmain.o \
                $(BIOS_DIR)/gdt.o \
                $(BIOS_DIR)/gdt_flush.o \
+               $(BIOS_DIR)/idt.o \
+               $(BIOS_DIR)/idt_flush.o \
+               $(BIOS_DIR)/interrupt.o \
+               $(BIOS_DIR)/interrupt_c.o \
                $(BIOS_DIR)/framebuffer.o \
                $(BIOS_DIR)/io.o \
                $(BIOS_DIR)/serial.o
@@ -61,6 +65,26 @@ $(BIOS_DIR)/io.o: io/io.s
 
 # Compile serial driver
 $(BIOS_DIR)/serial.o: drivers/serial.c drivers/serial.h io/io.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+# Compile IDT implementation
+$(BIOS_DIR)/idt.o: idt.c idt.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+# Compile IDT assembly
+$(BIOS_DIR)/idt_flush.o: idt_flush.s
+	mkdir -p $(BIOS_DIR)
+	$(AS) $(ASFLAGS) $< -o $@
+
+# Compile interrupt assembly handlers
+$(BIOS_DIR)/interrupt.o: interrupt.s
+	mkdir -p $(BIOS_DIR)
+	$(AS) $(ASFLAGS) $< -o $@
+
+# Compile C interrupt handler
+$(BIOS_DIR)/interrupt_c.o: interrupt.c interrupt.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 

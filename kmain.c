@@ -1,6 +1,7 @@
 #include "multiboot.h"
 #include "drivers/framebuffer.h"
 #include "drivers/serial.h"
+#include "idt.h"
 
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 
@@ -18,6 +19,13 @@ void kmain(uint32_t magic, uint32_t mbi_address)
         return;
 
     serial_initialize();
+    idt_install();
+
+    serial_write(
+        0x3F8,
+        "IDT successfully loaded!\n",
+        25
+    );
 
     serial_write(
         0x3F8,
