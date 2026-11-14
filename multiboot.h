@@ -2,10 +2,22 @@
 #ifndef MULTIBOOT_H
 #define MULTIBOOT_H
 
+#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
+#define MULTIBOOT_INFO_MODS        (1 << 3)
+
 typedef unsigned char  uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int   uint32_t;
 typedef unsigned long long uint64_t;
+
+/* Multiboot 1 module descriptor */
+struct multiboot_module
+{
+    uint32_t mod_start;
+    uint32_t mod_end;
+    uint32_t string;
+    uint32_t reserved;
+};
 
 /* Multiboot 1 information structure */
 struct multiboot_info

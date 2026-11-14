@@ -2,9 +2,10 @@ global loader
 extern kmain
 extern gdt_install
 
-MAGIC_NUMBER equ 0x1BADB002
-FLAGS        equ 0x0
-CHECKSUM     equ -(MAGIC_NUMBER + FLAGS)
+MAGIC_NUMBER  equ 0x1BADB002
+ALIGN_MODULES equ 0x00000001
+
+CHECKSUM      equ -(MAGIC_NUMBER + ALIGN_MODULES)
 
 KERNEL_STACK_SIZE equ 4096
 
@@ -12,7 +13,7 @@ section .text
 align 4
 
     dd MAGIC_NUMBER
-    dd FLAGS
+    dd ALIGN_MODULES
     dd CHECKSUM
 
 loader:

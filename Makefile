@@ -5,6 +5,8 @@ LD = ld
 BUILD_DIR = build
 BIOS_DIR = $(BUILD_DIR)/bios
 UEFI_DIR = $(BUILD_DIR)/uefi
+MODULE_SRC = modules/program.s
+MODULE_BIN = iso/modules/program
 
 CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin \
          -fno-stack-protector -nostartfiles \
@@ -125,8 +127,13 @@ $(UEFI_DIR)/BOOTX64.EFI: $(UEFI_OBJECTS) uefi/link.ld
 
 uefi: $(UEFI_DIR)/BOOTX64.EFI
 
+# Compile external program as a flat binary
+$(MODULE_BIN): $(MODULE_SRC)
+	mkdir -p iso/modules
+	$(AS) -f bin $< -o $@
+
 # Generate BIOS + UEFI bootable ISO
-os.iso: kernel.elf $(UEFI_DIR)/BOOTX64.EFI iso/boot/grub/grub.cfg
+os.iso: kernel.elf $(UEFI_DIR)/BOOTX64.EFI $(MODULE_BIN) iso/boot/grub/grub.cfg
 	mkdir -p iso/boot/grub
 	cp kernel.elf iso/boot/kernel.elf
 	mkdir -p iso/EFI/BOOT
@@ -155,5 +162,6 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f loader.o kmain.o drivers/framebuffer.o kernel.elf os.iso
 	rm -f iso/boot/kernel.elf iso/EFI/BOOT/BOOTX64.EFI
+	rm -f $(MODULE_BIN)
 
 .PHONY: uefi
