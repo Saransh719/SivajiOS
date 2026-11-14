@@ -6,6 +6,8 @@
 #include "mm/paging.h"
 #include "mm/pmm.h"
 #include "mm/heap.h"
+#include "tss.h"
+#include "usermode.h"
 #include "keyboard.h"
 
 int fb_init(const struct multiboot_info *mbi);
@@ -37,6 +39,7 @@ void kmain(uint32_t magic, uint32_t mbi_address)
 
     // Initialize hardware and interrupts
     serial_initialize();
+    tss_install();
     idt_install();
     if (!paging_init(mbi)) {
         serial_write(0x3F8, "ERROR: Paging initialization failed!\n",
@@ -127,6 +130,37 @@ void kmain(uint32_t magic, uint32_t mbi_address)
     pic_remap();
     pic_clear_mask(1);
     __asm__ volatile ("sti");
+
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char ring3_test[] = "ring3-test";
+        unsigned int i = 0;
+        while (ring3_test[i] && arg[i] == ring3_test[i]) i++;
+        if (!ring3_test[i] && arg[i] == '\0') {
+            (void)usermode_run_test(0);
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char ring3_fault_test[] = "ring3-fault-test";
+        unsigned int i = 0;
+        while (ring3_fault_test[i] && arg[i] == ring3_fault_test[i]) i++;
+        if (!ring3_fault_test[i] && arg[i] == '\0') {
+            (void)usermode_run_test(1);
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char syscall_test[] = "syscall-test";
+        unsigned int i = 0;
+        while (syscall_test[i] && arg[i] == syscall_test[i]) i++;
+        if (!syscall_test[i] && arg[i] == '\0') {
+            (void)usermode_run_test(USERMODE_TEST_SYSCALL);
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
 
     if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
         const char *arg = (const char *)mbi->cmdline;

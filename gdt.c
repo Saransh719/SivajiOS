@@ -1,8 +1,8 @@
 
 #include "gdt.h"
 
-/* Three GDT entries: null, code, data */
-static struct gdt_entry gdt_entries[3];
+/* Null, kernel code/data, user code/data, and the 32-bit TSS descriptor. */
+static struct gdt_entry gdt_entries[6];
 
 /* GDT pointer */
 static struct gdt_ptr gdt_pointer;
@@ -37,7 +37,7 @@ void gdt_install(void)
     /* Null descriptor */
     gdt_set_gate(0, 0, 0, 0, 0);
 
-    /* Kernel code segment: Base 0, Limit 4 GB, RX, DPL 0 */
+    /* Kernel code/data remain DPL 0. */
     gdt_set_gate(
         1,
         0x00000000,
@@ -45,6 +45,11 @@ void gdt_install(void)
         0x9A,
         0xCF
     );
+
+    /* Flat user segments. Paging U/S bits still protect kernel pages. */
+    gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);
+    gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
+    gdt_set_gate(5, 0, 0, 0, 0);
 
     /* Kernel data segment: Base 0, Limit 4 GB, RW, DPL 0 */
     gdt_set_gate(
@@ -57,4 +62,10 @@ void gdt_install(void)
 
     /* Load the GDT */
     gdt_flush((unsigned int)&gdt_pointer);
+}
+
+void gdt_set_tss_descriptor(unsigned int base, unsigned int limit)
+{
+    /* Present, available 32-bit TSS (type 9), DPL 0. */
+    gdt_set_gate(5, base, limit, 0x89, 0x00);
 }

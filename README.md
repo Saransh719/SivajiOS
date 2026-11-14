@@ -54,7 +54,9 @@ physical and are not adjusted. Its fixed 4 MiB page-table pool remains
 temporary storage, separate from the PMM; the bootstrap requires the linked kernel image to fit within its
 16 MiB physical alias and expects initial Multiboot information below 64 MiB.
 The upper 1 GiB cannot be identity-mapped because it is reserved for high-half
-virtual addresses. Ring 3 and identity-map removal are not implemented.
+virtual addresses. The low identity mapping is retained for boot structures,
+modules, boot page tables, and legacy physical pointers; it remains
+supervisor-only.
 
 The GRUB entry “Paging fault diagnostic test (destructive)” deliberately reads
 an unmapped page and prints the #PF address and error flags over COM1.
@@ -104,3 +106,67 @@ and halts. A failed physical allocation or page mapping unwinds frames mapped
 during that growth attempt. The 16 MiB heap ceiling, static paging-table pool,
 single-threaded assumptions, and lack of heap-page reclamation are current
 limitations; allocation failure is returned as `NULL`.
+
+## BIOS Ring 3 and TSS
+
+The BIOS GDT selectors are kernel code `0x08` (DPL 0), kernel data `0x10`
+(DPL 0), user code `0x1B` (descriptor `0x18`, RPL 3), user data `0x23`
+(descriptor `0x20`, RPL 3), and TSS `0x28`. `tss.c` installs a packed
+104-byte 32-bit TSS with `ss0=0x10` and a dedicated 16 KiB higher-half Ring 0
+interrupt stack as `esp0`; `ltr 0x28` loads it and the CPU marks the descriptor
+busy. There is no I/O bitmap, and user EFLAGS keep IOPL at zero.
+
+The isolated test address space uses user code at `0x40000000` (user,
+read-only PTE), user data at `0x40001000` (user, writable PTE), and one user
+stack page at `0xBFFFF000` with initial ESP `0xC0000000`. These sit below the
+kernel split and do not overlap the kernel, heap (`0xD0000000` range),
+framebuffer alias (`0xE0000000` range), or page-table storage. Each page is
+backed by a PMM frame and mapped through `paging_map_page`; failed setup rolls
+back mapped pages and frames. Physical frame addresses are not dereferenced.
+The mapper sets the PDE user bit for those page tables while user PTEs carry
+their own permissions; kernel PTEs remain supervisor-only. The test pages are
+unmapped and returned to PMM after the user context exits.
+
+The IDT exposes only vector `0x80` as a DPL 3 gate. The interrupt stub saves
+the interrupted data selectors and loads kernel selectors before calling C.
+On user entry, hardware obtains the kernel stack from the TSS. The syscall
+handler changes the saved `iret` frame to a Ring 0 trampoline, which restores
+the suspended kernel stack. User exceptions are reported and returned to the
+test caller; kernel exceptions retain their fatal behavior. The separate
+memory-protection GRUB test reads a mapped supervisor-only kernel text page
+and expects a present, user-mode page fault (`CR2=0xC0118000`, error bits
+`0x5`).
+
+Ring 3 is currently a fixed diagnostic context, not a process model. There is
+no ELF loader, process-level syscall ABI, per-process page directory, or
+scheduler. User mapping addresses and the existing static page-table pool are
+fixed; kernel low identity mappings remain in place.
+
+## BIOS system-call ABI
+
+Ring 3 calls the sole user-callable IDT gate with `int 0x80`. The register ABI
+is `EAX=number`, `EBX=argument 1`, `ECX=argument 2`, `EDX=argument 3`, with a
+signed 32-bit result in EAX. `SYS_WRITE` (1) takes a user buffer in EBX and a
+byte count in ECX, writes to COM1, and returns the count. A zero count returns
+zero. Writes above 4096 bytes return `-E2BIG` (`-7`); invalid or inaccessible
+user ranges return `-EFAULT` (`-14`). `SYS_EXIT` (2) takes its status in EBX
+and returns through the existing Ring 0 trampoline. Unknown numbers return
+`-ENOSYS` (`-38`) without leaving user mode.
+Syscall numbers and error constants come from `syscall_abi.h`, shared by the C
+dispatcher and preprocessed NASM test program.
+
+`validate_user_range`, `copy_from_user`, and `copy_to_user` check 32-bit range
+overflow, reject addresses at or above `0xC0000000`, and inspect effective
+permissions from both PDE and PTE. Read access requires present user mappings;
+write access additionally requires writable bits in both levels. The syscall
+dispatcher validates the entire `sys_write` range before copying in bounded
+chunks, so kernel or unmapped pointers do not reach the serial driver. The
+syscall diagnostic checks a valid code/data buffer, unknown-call handling, a
+supervisor kernel pointer, an address range crossing the user/kernel boundary,
+an unmapped user address, 32-bit pointer-plus-length wraparound, and a rejected
+`copy_to_user` against a kernel guard.
+
+This is still a fixed single-user test environment. There is no process
+management, descriptor table, filesystem, general console routing, or ELF
+loader. `sys_exit` returns to the one suspended Ring 0 caller; it does not
+schedule another task.

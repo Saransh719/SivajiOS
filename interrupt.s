@@ -50,6 +50,7 @@ global interrupt_handler_44
 global interrupt_handler_45
 global interrupt_handler_46
 global interrupt_handler_47
+global interrupt_handler_128
 
 extern interrupt_handler
 
@@ -76,15 +77,45 @@ common_interrupt_handler:
     ; Save general-purpose registers
     pusha
 
+    ; Preserve interrupted segments and load kernel data selectors for C.
+    xor eax, eax
+    mov ax, ds
+    push eax
+    xor eax, eax
+    mov ax, es
+    push eax
+    xor eax, eax
+    mov ax, fs
+    push eax
+    xor eax, eax
+    mov ax, gs
+    push eax
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
     ; Save the pointer to the saved registers
     mov eax, esp
+    lea edx, [eax + 16]
 
     ; Call C handler:
     ; interrupt_handler(register_state, interrupt_number)
-    push dword [eax + 32]
-    push eax
+    push dword [edx + 32]
+    push edx
     call interrupt_handler
     add esp, 8
+
+    ; Restore interrupted data selectors before general registers.
+    pop eax
+    mov gs, ax
+    pop eax
+    mov fs, ax
+    pop eax
+    mov es, ax
+    pop eax
+    mov ds, ax
 
     ; Restore registers
     popa
@@ -149,3 +180,4 @@ no_error_code_interrupt_handler 44
 no_error_code_interrupt_handler 45
 no_error_code_interrupt_handler 46
 no_error_code_interrupt_handler 47
+no_error_code_interrupt_handler 128

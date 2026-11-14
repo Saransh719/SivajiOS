@@ -18,6 +18,12 @@ LDFLAGS = -T link.ld -melf_i386
 BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
                $(BIOS_DIR)/kmain.o \
                $(BIOS_DIR)/gdt.o \
+               $(BIOS_DIR)/tss.o \
+               $(BIOS_DIR)/usermode.o \
+               $(BIOS_DIR)/usermem.o \
+               $(BIOS_DIR)/syscall.o \
+               $(BIOS_DIR)/usermode_asm.o \
+               $(BIOS_DIR)/ring3_test.o \
                $(BIOS_DIR)/gdt_flush.o \
                $(BIOS_DIR)/idt.o \
                $(BIOS_DIR)/idt_flush.o \
@@ -47,7 +53,7 @@ $(BIOS_DIR)/loader.o: loader.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile kernel
-$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.h gdt.h keyboard.h
+$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.h gdt.h tss.h usermode.h keyboard.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -55,6 +61,31 @@ $(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.
 $(BIOS_DIR)/gdt.o: gdt.c gdt.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/tss.o: tss.c tss.h gdt.h multiboot.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/usermode.o: usermode.c usermode.h usermem.h syscall.h syscall_abi.h interrupt.h gdt.h mm/paging.h mm/pmm.h drivers/serial.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/usermem.o: usermem.c usermem.h mm/paging.h multiboot.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/syscall.o: syscall.c syscall.h syscall_abi.h usermem.h interrupt.h multiboot.h drivers/serial.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/usermode_asm.o: usermode.s
+	mkdir -p $(BIOS_DIR)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(BIOS_DIR)/ring3_test.o: ring3_test.S syscall_abi.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) -E -P -x assembler-with-cpp $< -o $(BIOS_DIR)/ring3_test.i
+	$(AS) $(ASFLAGS) $(BIOS_DIR)/ring3_test.i -o $@
 
 # Compile GDT assembly
 $(BIOS_DIR)/gdt_flush.o: gdt_flush.s
@@ -92,7 +123,7 @@ $(BIOS_DIR)/interrupt.o: interrupt.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile C interrupt handler
-$(BIOS_DIR)/interrupt_c.o: interrupt.c interrupt.h
+$(BIOS_DIR)/interrupt_c.o: interrupt.c interrupt.h usermode.h mm/paging.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 

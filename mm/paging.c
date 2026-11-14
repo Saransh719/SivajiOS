@@ -105,6 +105,27 @@ int paging_get_physical_address(uint32_t va, uint32_t *pa)
     return 1;
 }
 
+/* Report effective user permissions: x86 requires U/S (and R/W for writes)
+ * in both the directory entry and the page-table entry. */
+int paging_get_page_flags(uint32_t va, uint32_t *flags)
+{
+    uint32_t directory_entry = page_directory[va >> 22];
+    if (!(directory_entry & PAGING_PRESENT)) return 0;
+    uint32_t *table = get_table(va >> 22, 0);
+    if (!table) return 0;
+    uint32_t table_entry = table[(va >> 12) & 0x3FFu];
+    if (!(table_entry & PAGING_PRESENT)) return 0;
+
+    uint32_t effective = PAGING_PRESENT;
+    if ((directory_entry & PAGING_WRITABLE) &&
+        (table_entry & PAGING_WRITABLE))
+        effective |= PAGING_WRITABLE;
+    if ((directory_entry & PAGING_USER) && (table_entry & PAGING_USER))
+        effective |= PAGING_USER;
+    if (flags) *flags = effective;
+    return 1;
+}
+
 void paging_flush_tlb(void)
 {
     uint32_t cr3;
@@ -234,7 +255,7 @@ int paging_init(const struct multiboot_info *mbi)
     return 1;
 }
 
-void paging_page_fault(uint32_t address, uint32_t error)
+void paging_report_page_fault(uint32_t address, uint32_t error)
 {
     serial_string("PAGE FAULT address=0x"); serial_hex(address);
     serial_string(" error=0x"); serial_hex(error); serial_string(" (");
@@ -244,6 +265,11 @@ void paging_page_fault(uint32_t address, uint32_t error)
     if (error & 8u) serial_string(", reserved-bit");
     if (error & 16u) serial_string(", instruction-fetch");
     serial_string(")\n");
+}
+
+void paging_page_fault(uint32_t address, uint32_t error)
+{
+    paging_report_page_fault(address, error);
     for (;;) __asm__ volatile ("cli; hlt");
 }
 

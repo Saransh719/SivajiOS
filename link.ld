@@ -46,6 +46,7 @@ SECTIONS
     .rodata ALIGN(0x1000) : AT(ADDR(.rodata) - KERNEL_BASE)
     {
         *(.rodata*)
+        *(.userprog)
     } :rodata
 
     .data ALIGN(0x1000) : AT(ADDR(.data) - KERNEL_BASE)

@@ -33,6 +33,7 @@ DECLARE_ISR(40); DECLARE_ISR(41);
 DECLARE_ISR(42); DECLARE_ISR(43);
 DECLARE_ISR(44); DECLARE_ISR(45);
 DECLARE_ISR(46); DECLARE_ISR(47);
+extern void interrupt_handler_128(void);
 
 #undef DECLARE_ISR
 
@@ -108,6 +109,9 @@ void idt_install(void)
             0x8F
         );
     }
+
+    /* The only user-callable gate: present 32-bit interrupt gate, DPL 3. */
+    idt_set_gate(0x80, (unsigned int)interrupt_handler_128, 0x08, 0xEE);
 
     /* Load IDT into the CPU */
     idt_flush((unsigned int)&idt_pointer);
