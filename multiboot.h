@@ -4,6 +4,7 @@
 
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 #define MULTIBOOT_INFO_MODS        (1 << 3)
+#define MULTIBOOT_INFO_CMDLINE     (1 << 2)
 
 typedef unsigned char  uint8_t;
 typedef unsigned short uint16_t;

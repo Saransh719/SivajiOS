@@ -2,6 +2,7 @@
 #include "framebuffer.h"
 #include "../multiboot.h"
 #include "../io/io.h"
+#include "../mm/paging.h"
 
 #define MULTIBOOT_INFO_FRAMEBUFFER 0x00001000
 
@@ -227,7 +228,8 @@ int fb_init(const struct multiboot_info *mbi)
     blue_position = 0;
 
     framebuffer =
-        (volatile uint32_t *)(uint32_t)mbi->framebuffer_addr;
+        (volatile uint32_t *)paging_physical_to_framebuffer_virtual(
+            (uint32_t)mbi->framebuffer_addr);
 
     fb_backend = FB_BACKEND_RGB;
 

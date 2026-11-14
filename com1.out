@@ -1,4 +1,9 @@
+Higher-half kernel mapping verified.
+Kernel executing at virtual EIP=0xC0118037
+Framebuffer virtual mapping verified.
+GRUB module identity map verified.
 IDT successfully loaded!
 Hello from my kernel!
 External program loaded successfully!
 Starting external program...
+External module physical range [0x00523000, 0x00523007)

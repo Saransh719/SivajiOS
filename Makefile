@@ -28,6 +28,8 @@ BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
                $(BIOS_DIR)/serial.o \
 			   $(BIOS_DIR)/pic.o \
 			   $(BIOS_DIR)/keyboard.o \
+               $(BIOS_DIR)/paging.o \
+               $(BIOS_DIR)/paging_enable.o \
 
 
 UEFI_OBJECTS = $(UEFI_DIR)/entry.o $(UEFI_DIR)/kmain.o $(UEFI_DIR)/framebuffer.o
@@ -43,7 +45,7 @@ $(BIOS_DIR)/loader.o: loader.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile kernel
-$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h
+$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h gdt.h keyboard.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -58,7 +60,7 @@ $(BIOS_DIR)/gdt_flush.o: gdt_flush.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile framebuffer driver
-$(BIOS_DIR)/framebuffer.o: drivers/framebuffer.c drivers/framebuffer.h io/io.h
+$(BIOS_DIR)/framebuffer.o: drivers/framebuffer.c drivers/framebuffer.h io/io.h mm/paging.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -100,6 +102,14 @@ $(BIOS_DIR)/pic.o: pic.c pic.h io/io.h
 $(BIOS_DIR)/keyboard.o: keyboard.c keyboard.h keyboard_map.h io/io.h drivers/framebuffer.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/paging.o: mm/paging.c mm/paging.h multiboot.h drivers/serial.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/paging_enable.o: mm/paging_enable.s
+	mkdir -p $(BIOS_DIR)
+	$(AS) $(ASFLAGS) $< -o $@
 
 # Link kernel
 kernel.elf: $(BIOS_OBJECTS) link.ld

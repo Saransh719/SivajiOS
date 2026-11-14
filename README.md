@@ -24,5 +24,47 @@ reuse that copy. The firmware code image is read-only.
 make uefi builds only the 64-bit UEFI application. make clean removes build
 outputs and generated kernel copies from the ISO staging directory.
 
-Both GRUB menu entries are available under UEFI. BIOS GRUB shows its 32-bit
-Multiboot entry.
+The UEFI GRUB menu offers its 64-bit chainload entry and a 32-bit Multiboot
+entry. BIOS GRUB offers normal boot and the paging diagnostic entries.
+
+The BIOS kernel uses 4 KiB identity and higher-half mappings. The linker keeps
+the Multiboot entry/bootstrap at physical `0x00100000`; regular kernel sections
+have VMAs at `0xC0000000 + physical address` and LMAs at their physical load
+addresses. The bootstrap tables and stack occupy about 96 KiB after the 1 MiB
+load point, so the current first regular kernel section is at `0xC0118000`.
+
+GRUB enters the physical `loader` symbol. It saves the Multiboot registers on
+an early low stack, then `mm/paging_enable.s` builds temporary identity
+`[0, 64 MiB)` and higher-half `[0xC0000000, 0xC1000000)` mappings, loads CR3,
+and enables paging once. `loader` explicitly jumps to `higher_half_entry`,
+which switches to the high kernel stack and installs the high-address GDT
+before entering C. C paging initialization reuses that active directory,
+retains identity mappings for Multiboot structures, modules, and VGA. The
+framebuffer is mapped at `0xE0000000`, because its common PCI address near
+`0xFD000000` overlaps the higher-half kernel virtual region and cannot remain
+identity-mapped there.
+
+Multiboot structure and module pointers remain physical and are accessed
+through the retained identity map. The framebuffer address in Multiboot data
+also remains physical, while the driver accesses its mapping at `0xE0000000`.
+Linker symbols and ordinary kernel globals/functions are high virtual
+addresses. `mm/paging.c` converts high kernel VMAs to physical addresses by
+subtracting `0xC0000000`; boot symbols and GRUB-provided addresses are already
+physical and are not adjusted. Its
+fixed 4 MiB page-table pool remains temporary storage, not a physical memory
+manager; the bootstrap requires the linked kernel image to fit within its
+16 MiB physical alias and expects initial Multiboot information below 64 MiB.
+The upper 1 GiB cannot be identity-mapped because it is reserved for high-half
+virtual addresses. No PMM, heap, Ring 3, or identity-map
+removal is implemented.
+
+The GRUB entry “Paging fault diagnostic test (destructive)” deliberately reads
+an unmapped page and prints the #PF address and error flags over COM1.
+“Paging keyboard IRQ test” waits for a key and confirms IRQ1 delivery over
+COM1. Normal boot does not run these tests.
+
+Normal BIOS boot prints a sampled kernel EIP before launching the external
+module, then prints the module's physical range. The module is a flat binary
+loaded by GRUB and intentionally executes through its low identity-mapped
+physical address, so a debugger EIP in that range after module launch is
+expected. The kernel's high execution is verified separately before launch.
