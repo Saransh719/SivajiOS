@@ -5,6 +5,7 @@
 #include "pic.h"
 #include "mm/paging.h"
 #include "mm/pmm.h"
+#include "mm/heap.h"
 #include "keyboard.h"
 
 int fb_init(const struct multiboot_info *mbi);
@@ -48,6 +49,7 @@ void kmain(uint32_t magic, uint32_t mbi_address)
         return;
     }
     pmm_init(mbi);
+    heap_init();
     uint32_t translated = 0;
     uint32_t kmain_virtual = (uint32_t)&kmain;
     if (!paging_get_physical_address((uint32_t)&kmain, &translated) ||
@@ -101,6 +103,16 @@ void kmain(uint32_t magic, uint32_t mbi_address)
         while (pmm_test[i] && arg[i] == pmm_test[i]) i++;
         if (!pmm_test[i] && arg[i] == '\0') {
             (void)pmm_run_self_tests();
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char heap_test[] = "heap-test";
+        unsigned int i = 0;
+        while (heap_test[i] && arg[i] == heap_test[i]) i++;
+        if (!heap_test[i] && arg[i] == '\0') {
+            (void)heap_run_self_tests();
             for (;;) __asm__ volatile ("cli; hlt");
         }
     }

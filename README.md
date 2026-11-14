@@ -54,7 +54,7 @@ physical and are not adjusted. Its fixed 4 MiB page-table pool remains
 temporary storage, separate from the PMM; the bootstrap requires the linked kernel image to fit within its
 16 MiB physical alias and expects initial Multiboot information below 64 MiB.
 The upper 1 GiB cannot be identity-mapped because it is reserved for high-half
-virtual addresses. No heap, Ring 3, or identity-map removal is implemented.
+virtual addresses. Ring 3 and identity-map removal are not implemented.
 
 The GRUB entry “Paging fault diagnostic test (destructive)” deliberately reads
 an unmapped page and prints the #PF address and error flags over COM1.
@@ -86,3 +86,21 @@ The “Physical memory manager test” GRUB entry runs reversible allocation,
 alignment, uniqueness, free, double-free, invalid-free, and reuse checks, then
 halts. Exhaustion testing is omitted to avoid retaining an array of every
 allocated frame.
+
+The kernel heap uses the lazy virtual range `[0xD0000000, 0xD1000000)`, between
+the kernel's `0xC...` mappings and framebuffer alias at `0xE0000000`. `heap_init`
+checks the range is unmapped but does not pre-map it. `kmalloc` grows it on
+demand by requesting PMM physical frames and mapping each supervisor-writable
+frame with the paging API. Physical addresses are never dereferenced directly.
+Allocation headers and the doubly linked free list are inside mapped heap
+pages; pointers are validated by walking known blocks. Blocks split on
+allocation and adjacent free blocks coalesce. Reallocation can grow in place
+or allocate/copy/free. Mapped heap pages are retained after `kfree` for reuse.
+
+The “Heap allocator test” GRUB entry checks small and multi-page allocations,
+alignment, reads/writes, reuse, splitting, coalescing, realloc, invalid and
+duplicate frees, and an oversized request. It prints each result over COM1
+and halts. A failed physical allocation or page mapping unwinds frames mapped
+during that growth attempt. The 16 MiB heap ceiling, static paging-table pool,
+single-threaded assumptions, and lack of heap-page reclamation are current
+limitations; allocation failure is returned as `NULL`.

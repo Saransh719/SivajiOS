@@ -30,6 +30,7 @@ BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
 			   $(BIOS_DIR)/keyboard.o \
                $(BIOS_DIR)/paging.o \
                $(BIOS_DIR)/pmm.o \
+               $(BIOS_DIR)/heap.o \
                $(BIOS_DIR)/paging_enable.o \
 
 
@@ -46,7 +47,7 @@ $(BIOS_DIR)/loader.o: loader.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile kernel
-$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h gdt.h keyboard.h
+$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.h gdt.h keyboard.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -113,6 +114,10 @@ $(BIOS_DIR)/paging_enable.o: mm/paging_enable.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(BIOS_DIR)/pmm.o: mm/pmm.c mm/pmm.h mm/paging.h multiboot.h drivers/serial.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/heap.o: mm/heap.c mm/heap.h mm/paging.h mm/pmm.h drivers/serial.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
