@@ -4,6 +4,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "mm/paging.h"
+#include "mm/pmm.h"
 #include "keyboard.h"
 
 int fb_init(const struct multiboot_info *mbi);
@@ -46,6 +47,7 @@ void kmain(uint32_t magic, uint32_t mbi_address)
                      sizeof("ERROR: Framebuffer initialization failed!\n") - 1);
         return;
     }
+    pmm_init(mbi);
     uint32_t translated = 0;
     uint32_t kmain_virtual = (uint32_t)&kmain;
     if (!paging_get_physical_address((uint32_t)&kmain, &translated) ||
@@ -91,6 +93,16 @@ void kmain(uint32_t magic, uint32_t mbi_address)
         }
         serial_write(0x3F8, "GRUB module identity map verified.\n",
                      sizeof("GRUB module identity map verified.\n") - 1);
+    }
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char pmm_test[] = "pmm-test";
+        unsigned int i = 0;
+        while (pmm_test[i] && arg[i] == pmm_test[i]) i++;
+        if (!pmm_test[i] && arg[i] == '\0') {
+            (void)pmm_run_self_tests();
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
     }
     if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
         const char *arg = (const char *)mbi->cmdline;

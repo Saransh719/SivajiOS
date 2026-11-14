@@ -5,6 +5,11 @@
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 #define MULTIBOOT_INFO_MODS        (1 << 3)
 #define MULTIBOOT_INFO_CMDLINE     (1 << 2)
+#define MULTIBOOT_INFO_MMAP        (1 << 6)
+#define MULTIBOOT_INFO_DRIVES      (1 << 7)
+#define MULTIBOOT_INFO_BOOT_LOADER (1 << 9)
+#define MULTIBOOT_INFO_VBE         (1 << 11)
+#define MULTIBOOT_INFO_FRAMEBUFFER (1 << 12)
 
 typedef unsigned char  uint8_t;
 typedef unsigned short uint16_t;
@@ -19,6 +24,16 @@ struct multiboot_module
     uint32_t string;
     uint32_t reserved;
 };
+
+/* Multiboot 1 variable-sized memory-map record. `size` excludes its own
+ * 32-bit field; the standard payload is 20 bytes. */
+struct multiboot_mmap_entry
+{
+    uint32_t size;
+    uint64_t address;
+    uint64_t length;
+    uint32_t type;
+} __attribute__((packed));
 
 /* Multiboot 1 information structure */
 struct multiboot_info

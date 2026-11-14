@@ -4,8 +4,6 @@
 #include "../io/io.h"
 #include "../mm/paging.h"
 
-#define MULTIBOOT_INFO_FRAMEBUFFER 0x00001000
-
 #define CELL_WIDTH  12
 #define CELL_HEIGHT 24
 

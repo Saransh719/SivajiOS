@@ -183,7 +183,7 @@ static int map_framebuffer_range(uint64_t physical_start, uint64_t length)
 int paging_init(const struct multiboot_info *mbi)
 {
     /* The physical bootstrap has already loaded this directory into CR3 and
-     * mapped the low 8 MiB both identity and at C0000000. Never clear active
+     * mapped the low 64 MiB identity and first 16 MiB at C0000000. Never clear active
      * high-half PDEs while executing from them. */
     page_table_count = 0;
     paging_active = 1;

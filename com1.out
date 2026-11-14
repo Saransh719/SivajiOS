@@ -1,3 +1,10 @@
+PMM Multiboot physical-address span: 4096 MiB
+PMM usable memory in map: 31 MiB
+PMM managed frames: 1048576
+PMM free frames: 6779
+PMM reserved frames: 1041797
+PMM bitmap physical=0x00523010 virtual=0xC0523010
+PMM ownership bitmap physical=0x00543010 virtual=0xC0543010
 Higher-half kernel mapping verified.
 Kernel executing at virtual EIP=0xC0118037
 Framebuffer virtual mapping verified.
@@ -6,4 +13,4 @@ IDT successfully loaded!
 Hello from my kernel!
 External program loaded successfully!
 Starting external program...
-External module physical range [0x00523000, 0x00523007)
+External module physical range [0x00564000, 0x00564007)

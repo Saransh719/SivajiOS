@@ -50,13 +50,11 @@ also remains physical, while the driver accesses its mapping at `0xE0000000`.
 Linker symbols and ordinary kernel globals/functions are high virtual
 addresses. `mm/paging.c` converts high kernel VMAs to physical addresses by
 subtracting `0xC0000000`; boot symbols and GRUB-provided addresses are already
-physical and are not adjusted. Its
-fixed 4 MiB page-table pool remains temporary storage, not a physical memory
-manager; the bootstrap requires the linked kernel image to fit within its
+physical and are not adjusted. Its fixed 4 MiB page-table pool remains
+temporary storage, separate from the PMM; the bootstrap requires the linked kernel image to fit within its
 16 MiB physical alias and expects initial Multiboot information below 64 MiB.
 The upper 1 GiB cannot be identity-mapped because it is reserved for high-half
-virtual addresses. No PMM, heap, Ring 3, or identity-map
-removal is implemented.
+virtual addresses. No heap, Ring 3, or identity-map removal is implemented.
 
 The GRUB entry “Paging fault diagnostic test (destructive)” deliberately reads
 an unmapped page and prints the #PF address and error flags over COM1.
@@ -68,3 +66,23 @@ module, then prints the module's physical range. The module is a flat binary
 loaded by GRUB and intentionally executes through its low identity-mapped
 physical address, so a debugger EIP in that range after module launch is
 expected. The kernel's high execution is verified separately before launch.
+
+`mm/pmm.c` manages 4 KiB physical frames using bitmaps initialized from the
+Multiboot variable-sized memory map. Frames start reserved; complete frames in
+type-1 usable entries become free, then non-usable entries and occupied kernel,
+boot, Multiboot, module, and framebuffer ranges are reserved. Its two static
+bitmaps live in kernel BSS, so the kernel's physical boundary reservation also
+covers their storage. PMM addresses are physical; the PMM does not dereference
+allocated frames, and frames above the current mappings need a later mapping
+mechanism before use by callers. `0xFFFFFFFF` reports allocation failure.
+
+The PMM diagnostic reports both the highest physical address span and the sum
+of usable type-1 map ranges. For example, QEMU's 32 MiB BIOS map may include a
+reserved address-space range ending at 4 GiB: the span is then 4096 MiB while
+usable RAM remains about 31 MiB. The managed-frame count follows the span;
+reserved-frame count includes holes and all non-usable frames below that end.
+
+The “Physical memory manager test” GRUB entry runs reversible allocation,
+alignment, uniqueness, free, double-free, invalid-free, and reuse checks, then
+halts. Exhaustion testing is omitted to avoid retaining an array of every
+allocated frame.
