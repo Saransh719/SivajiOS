@@ -1,25 +1,44 @@
-PMM Multiboot physical-address span: 4096 MiB
-PMM usable memory in map: 31 MiB
-PMM managed frames: 1048576
-PMM free frames: 6769
-PMM reserved frames: 1041807
-PMM bitmap physical=0x00525010 virtual=0xC0525010
-PMM ownership bitmap physical=0x00545010 virtual=0xC0545010
-Heap initialized: lazy range [0xD0000000, 0xD1000000).
-Higher-half kernel mapping verified.
-Kernel executing at virtual EIP=0xC0118037
-Framebuffer virtual mapping verified.
-GRUB module identity map verified.
-HEAP TEST PASS: small allocation
-HEAP TEST PASS: 16-byte alignment
-HEAP TEST PASS: small allocation read/write
-HEAP TEST PASS: free block split
-HEAP TEST PASS: freed block reuse
-HEAP TEST PASS: large multi-page allocation and access
-HEAP TEST PASS: adjacent free blocks coalesce
-HEAP TEST PASS: realloc growth, preserved data, and shrink
-HEAP TEST PASS: invalid pointer ignored
-HEAP TEST PASS: double free ignored
-HEAP TEST PASS: oversized allocation fails without heap mutation
-HEAP TEST PASS: PMM exhaustion rolls back partial heap growth
-HEAP TEST SUMMARY: PASS
+================================================
+                    sivajiOS
+          A 32-bit Operating System
+================================================
+
+              Created by Saransh Sapra
+
+       Built from scratch using C and NASM
+
+Initializing system...
+
+[OK] GDT
+[OK] IDT
+[OK] Paging
+[OK] Physical Memory Manager
+[OK] Kernel Heap
+[OK] Framebuffer
+[OK] Keyboard
+[OK] System Calls
+[OK] Ring 3
+[OK] ELF32 Loader
+
+System initialization complete.
+
+Type 'help' to explore sivajiOS.
+
+sivajiOS> run
+Running tagged ELF user program...
+ELF: entering Ring 3.
+
+[sivajiOS user program]
+
+Running in Ring 3.
+Testing system call interface... passed.
+Testing writable data... passed.
+Testing zero-initialized BSS... passed.
+Calculation result: 42
+
+User program completed successfully.
+Returning to kernel...
+Ring 3 sys_exit: saved CPL=3, status=0x00000000
+ELF: returned from user context.
+run: program exited successfully.
+sivajiOS> 

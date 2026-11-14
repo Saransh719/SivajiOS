@@ -7,6 +7,8 @@ BIOS_DIR = $(BUILD_DIR)/bios
 UEFI_DIR = $(BUILD_DIR)/uefi
 MODULE_SRC = modules/program.s
 MODULE_BIN = iso/modules/program
+USER_ELF = iso/modules/user.elf
+USER_FAULT_ELF = iso/modules/user-fault.elf
 
 CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin \
          -fno-stack-protector -nostartfiles \
@@ -20,6 +22,9 @@ BIOS_OBJECTS = $(BIOS_DIR)/loader.o \
                $(BIOS_DIR)/gdt.o \
                $(BIOS_DIR)/tss.o \
                $(BIOS_DIR)/usermode.o \
+               $(BIOS_DIR)/elf.o \
+               $(BIOS_DIR)/elf_validate.o \
+               $(BIOS_DIR)/shell.o \
                $(BIOS_DIR)/usermem.o \
                $(BIOS_DIR)/syscall.o \
                $(BIOS_DIR)/usermode_asm.o \
@@ -53,7 +58,7 @@ $(BIOS_DIR)/loader.o: loader.s
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Compile kernel
-$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.h gdt.h tss.h usermode.h keyboard.h
+$(BIOS_DIR)/kmain.o: kmain.c drivers/framebuffer.h mm/paging.h mm/pmm.h mm/heap.h gdt.h tss.h usermode.h keyboard.h exec/elf.h shell/shell.h idt.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -70,11 +75,23 @@ $(BIOS_DIR)/usermode.o: usermode.c usermode.h usermem.h syscall.h syscall_abi.h 
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
+$(BIOS_DIR)/elf.o: exec/elf.c exec/elf.h exec/elf_validate.h usermode.h mm/paging.h mm/pmm.h mm/heap.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/elf_validate.o: exec/elf_validate.c exec/elf_validate.h multiboot.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(BIOS_DIR)/shell.o: shell/shell.c shell/shell.h keyboard.h drivers/framebuffer.h mm/pmm.h mm/heap.h exec/elf.h exec/elf_validate.h version.h
+	mkdir -p $(BIOS_DIR)
+	$(CC) $(CFLAGS) $< -o $@
+
 $(BIOS_DIR)/usermem.o: usermem.c usermem.h mm/paging.h multiboot.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
-$(BIOS_DIR)/syscall.o: syscall.c syscall.h syscall_abi.h usermem.h interrupt.h multiboot.h drivers/serial.h
+$(BIOS_DIR)/syscall.o: syscall.c syscall.h syscall_abi.h usermem.h interrupt.h multiboot.h drivers/serial.h drivers/framebuffer.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -132,7 +149,7 @@ $(BIOS_DIR)/pic.o: pic.c pic.h io/io.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
-$(BIOS_DIR)/keyboard.o: keyboard.c keyboard.h keyboard_map.h io/io.h drivers/framebuffer.h
+$(BIOS_DIR)/keyboard.o: keyboard.c keyboard.h keyboard_map.h io/io.h
 	mkdir -p $(BIOS_DIR)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -183,8 +200,30 @@ $(MODULE_BIN): $(MODULE_SRC)
 	mkdir -p iso/modules
 	$(AS) -f bin $< -o $@
 
+# ELF user application; no libc, interpreter, or hosted startup.
+$(BUILD_DIR)/user.o: user/program.c syscall_abi.h
+	mkdir -p $(BUILD_DIR)
+	$(CC) -m32 -std=c11 -ffreestanding -fno-pic -fno-pie -fno-stack-protector \
+		-fno-builtin -fno-asynchronous-unwind-tables -Wall -Wextra -Werror -c $< -o $@
+
+$(BUILD_DIR)/user_entry.o: user/entry.s
+	mkdir -p $(BUILD_DIR)
+	$(AS) -f elf32 $< -o $@
+
+$(USER_ELF): $(BUILD_DIR)/user.o $(BUILD_DIR)/user_entry.o user/link.ld
+	mkdir -p iso/modules
+	$(LD) -melf_i386 -static -T user/link.ld $(BUILD_DIR)/user_entry.o $(BUILD_DIR)/user.o -o $@
+
+$(BUILD_DIR)/user_fault_entry.o: user/fault_entry.s
+	mkdir -p $(BUILD_DIR)
+	$(AS) -f elf32 $< -o $@
+
+$(USER_FAULT_ELF): $(BUILD_DIR)/user_fault_entry.o user/fault_link.ld
+	mkdir -p iso/modules
+	$(LD) -melf_i386 -static -T user/fault_link.ld $(BUILD_DIR)/user_fault_entry.o -o $@
+
 # Generate BIOS + UEFI bootable ISO
-os.iso: kernel.elf $(UEFI_DIR)/BOOTX64.EFI $(MODULE_BIN) iso/boot/grub/grub.cfg
+os.iso: kernel.elf $(UEFI_DIR)/BOOTX64.EFI $(MODULE_BIN) $(USER_ELF) $(USER_FAULT_ELF) iso/boot/grub/grub.cfg
 	mkdir -p iso/boot/grub
 	cp kernel.elf iso/boot/kernel.elf
 	mkdir -p iso/EFI/BOOT
@@ -214,5 +253,13 @@ clean:
 	rm -f loader.o kmain.o drivers/framebuffer.o kernel.elf os.iso
 	rm -f iso/boot/kernel.elf iso/EFI/BOOT/BOOTX64.EFI
 	rm -f $(MODULE_BIN)
+	rm -f $(USER_ELF)
+	rm -f $(USER_FAULT_ELF)
 
 .PHONY: uefi
+
+.PHONY: test-elf-validator
+test-elf-validator:
+	mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -Wall -Wextra -Werror tests/elf_validate_test.c exec/elf_validate.c -o $(BUILD_DIR)/elf_validate_test
+	$(BUILD_DIR)/elf_validate_test

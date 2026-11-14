@@ -1,0 +1,6 @@
+#ifndef SIVAJIOS_VERSION_H
+#define SIVAJIOS_VERSION_H
+
+#define SIVAJIOS_VERSION "0.2.0"
+
+#endif

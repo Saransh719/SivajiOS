@@ -105,6 +105,10 @@ int usermode_handle_interrupt(struct cpu_state *state, unsigned int vector,
     user_exit_status = vector;
     serial_text("Ring 3 exception vector ");
     serial_hex(vector);
+    serial_text(" eip=0x");
+    serial_hex(frame[10]);
+    serial_text(" error=0x");
+    serial_hex(error);
     serial_text("; returning to kernel.\n");
     prepare_kernel_return(state);
     return 1;
@@ -118,6 +122,19 @@ static void release_user_pages(const uint32_t frames[3], unsigned int mapped)
         (void)paging_unmap_page(addresses[index]);
         pmm_free_frame(frames[index]);
     }
+}
+
+int usermode_run_loaded(uint32_t entry, uint32_t stack, uint32_t *exit_status)
+{
+    user_active = 1;
+    protection_test_active = 0;
+    user_exit_reason = EXIT_NONE;
+    user_exit_status = 0xFFFFFFFFu;
+    user_saved_cpl = 0;
+    enter_user_mode(entry, stack);
+    user_active = 0;
+    if (exit_status) *exit_status = user_exit_status;
+    return user_exit_reason == EXIT_SYSCALL;
 }
 
 int usermode_run_test(int test_kind)

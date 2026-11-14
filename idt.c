@@ -3,6 +3,7 @@
 
 /* The IDT contains 256 entries */
 static struct idt_entry idt_entries[256];
+static int idt_installed;
 static struct idt_ptr idt_pointer;
 
 /* Assembly interrupt handler declarations */
@@ -85,6 +86,7 @@ void idt_set_gate(
 /* Initialize and load the IDT */
 void idt_install(void)
 {
+    idt_installed = 0;
     /* Configure IDT pointer */
     idt_pointer.limit = sizeof(idt_entries) - 1;
     idt_pointer.base = (unsigned int)&idt_entries;
@@ -115,4 +117,7 @@ void idt_install(void)
 
     /* Load IDT into the CPU */
     idt_flush((unsigned int)&idt_pointer);
+    idt_installed = 1;
 }
+
+int idt_is_installed(void) { return idt_installed; }

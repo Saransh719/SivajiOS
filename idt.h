@@ -19,6 +19,7 @@ struct idt_ptr {
 
 /* Initialize the IDT */
 void idt_install(void);
+int idt_is_installed(void);
 
 /* Load the IDT using assembly */
 void idt_flush(unsigned int);

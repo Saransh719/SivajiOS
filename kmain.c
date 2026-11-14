@@ -9,15 +9,10 @@
 #include "tss.h"
 #include "usermode.h"
 #include "keyboard.h"
+#include "exec/elf.h"
+#include "shell/shell.h"
 
 int fb_init(const struct multiboot_info *mbi);
-
-static uint32_t current_instruction_pointer(void)
-{
-    uint32_t instruction_pointer;
-    __asm__ volatile ("call 1f\n1: popl %0" : "=r"(instruction_pointer));
-    return instruction_pointer;
-}
 
 static void serial_write_hex32(uint32_t value)
 {
@@ -61,12 +56,6 @@ void kmain(uint32_t magic, uint32_t mbi_address)
                      sizeof("ERROR: Higher-half kernel map check failed!\n") - 1);
         return;
     }
-    serial_write(0x3F8, "Higher-half kernel mapping verified.\n",
-                 sizeof("Higher-half kernel mapping verified.\n") - 1);
-    serial_write(0x3F8, "Kernel executing at virtual EIP=0x",
-                 sizeof("Kernel executing at virtual EIP=0x") - 1);
-    serial_write_hex32(current_instruction_pointer());
-    serial_write(0x3F8, "\n", 1);
     if (mbi->flags & 0x1000u) {
         uint32_t framebuffer_physical = 0;
         uint32_t framebuffer_physical_address =
@@ -81,8 +70,6 @@ void kmain(uint32_t magic, uint32_t mbi_address)
                          sizeof("ERROR: Framebuffer mapping check failed!\n") - 1);
             return;
         }
-        serial_write(0x3F8, "Framebuffer virtual mapping verified.\n",
-                     sizeof("Framebuffer virtual mapping verified.\n") - 1);
     }
     if ((mbi->flags & MULTIBOOT_INFO_MODS) && mbi->mods_count) {
         const struct multiboot_module *module =
@@ -96,8 +83,6 @@ void kmain(uint32_t magic, uint32_t mbi_address)
                          sizeof("ERROR: GRUB module mapping check failed!\n") - 1);
             return;
         }
-        serial_write(0x3F8, "GRUB module identity map verified.\n",
-                     sizeof("GRUB module identity map verified.\n") - 1);
     }
     if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
         const char *arg = (const char *)mbi->cmdline;
@@ -130,6 +115,55 @@ void kmain(uint32_t magic, uint32_t mbi_address)
     pic_remap();
     pic_clear_mask(1);
     __asm__ volatile ("sti");
+
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char shell_command[] = "shell";
+        unsigned int i = 0;
+        while (shell_command[i] && arg[i] == shell_command[i]) i++;
+        if (!shell_command[i] && arg[i] == '\0') {
+            (void)shell_run(mbi, 1, 1, idt_is_installed(),
+                            tss_is_installed(), pmm_is_initialized(),
+                            heap_is_initialized(), 1);
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
+
+    if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
+        const char *arg = (const char *)mbi->cmdline;
+        static const char elf_test[] = "elf-test";
+        static const char elf_fault_test[] = "elf-fault-test";
+        unsigned int i = 0, j = 0;
+        while (elf_test[i] && arg[i] == elf_test[i]) i++;
+        while (elf_fault_test[j] && arg[j] == elf_fault_test[j]) j++;
+        int fault_test = !elf_fault_test[j] && arg[j] == '\0';
+        if ((!elf_test[i] && arg[i] == '\0') || fault_test) {
+            if (!(mbi->flags & MULTIBOOT_INFO_MODS) || mbi->mods_count != 1) {
+                serial_write(0x3F8, "ELF test requires exactly one module.\n",
+                             sizeof("ELF test requires exactly one module.\n")-1);
+            } else {
+                const struct multiboot_module *m =
+                    (const struct multiboot_module *)mbi->mods_addr;
+                if (m->mod_end <= m->mod_start)
+                    serial_write(0x3F8, "ELF test module bounds invalid.\n",
+                                 sizeof("ELF test module bounds invalid.\n")-1);
+                else {
+                    (void)elf32_run_module(m->mod_start,m->mod_end-m->mod_start);
+                    uint32_t stable_free_count = pmm_get_free_frame_count();
+                    for (unsigned int run = 1; run < 3; run++) {
+                        (void)elf32_run_module(m->mod_start,m->mod_end-m->mod_start);
+                        if (pmm_get_free_frame_count() == stable_free_count)
+                            serial_write(0x3F8, "ELF repeated-run PMM cleanup: PASS.\n",
+                                         sizeof("ELF repeated-run PMM cleanup: PASS.\n")-1);
+                        else
+                            serial_write(0x3F8, "ELF repeated-run PMM cleanup: FAIL.\n",
+                                         sizeof("ELF repeated-run PMM cleanup: FAIL.\n")-1);
+                    }
+                }
+            }
+            for (;;) __asm__ volatile ("cli; hlt");
+        }
+    }
 
     if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) && mbi->cmdline) {
         const char *arg = (const char *)mbi->cmdline;
@@ -193,7 +227,7 @@ void kmain(uint32_t magic, uint32_t mbi_address)
     fb_clear(FB_WHITE, FB_BLACK);
 
     fb_write_string(
-        "Welcome to Nigga OS!",
+        "Welcome to sivajiOS!",
         0, 0,
         FB_GREEN,
         FB_BLACK
@@ -215,7 +249,7 @@ void kmain(uint32_t magic, uint32_t mbi_address)
 
     fb_clear(FB_WHITE, FB_BLACK);
 
-    fb_write("Hello again from NiggaOS!\n", 26);
+    fb_write("Hello again from sivajiOS!\n", 27);
     fb_write("This is the new framebuffer driver.", 36);
 
     // --------------------------------

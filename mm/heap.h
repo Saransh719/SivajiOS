@@ -9,6 +9,16 @@ typedef unsigned int size_t;
 #endif
 
 void heap_init(void);
+struct heap_stats {
+    uint32_t capacity_bytes;
+    uint32_t mapped_bytes;
+    uint32_t allocated_payload_bytes;
+    uint32_t free_payload_bytes;
+    uint32_t unmapped_bytes;
+    uint32_t block_count;
+};
+int heap_is_initialized(void);
+int heap_get_stats(struct heap_stats *stats);
 /* kmalloc(0) returns NULL; invalid pointers passed to kfree are ignored. */
 void *kmalloc(size_t size);
 void kfree(void *ptr);

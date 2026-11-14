@@ -18,11 +18,11 @@ extern char _kernel_phys_start;
 extern char _kernel_phys_end;
 
 static uint32_t managed_frames;
+static uint32_t usable_frames;
 static uint32_t free_frames;
 static uint32_t search_hint;
-static uint32_t detected_mib;
-static uint32_t usable_mib;
 static int memory_map_valid;
+static uint64_t usable_ram_bytes;
 
 static int bit_is_set(const uint8_t *bitmap, uint32_t frame)
 {
@@ -44,26 +44,6 @@ static void serial_text(const char *text)
     unsigned int length = 0;
     while (text[length]) length++;
     serial_write(COM1, text, length);
-}
-
-static void serial_u32(uint32_t value)
-{
-    char digits[10];
-    unsigned int count = 0;
-    do {
-        digits[count++] = (char)('0' + value % 10u);
-        value /= 10u;
-    } while (value && count < sizeof(digits));
-    while (count) serial_write(COM1, &digits[--count], 1);
-}
-
-static void serial_hex32(uint32_t value)
-{
-    static const char hex[] = "0123456789ABCDEF";
-    char digits[8];
-    for (unsigned int i = 0; i < 8; i++)
-        digits[i] = hex[(value >> ((7u - i) * 4u)) & 0xFu];
-    serial_write(COM1, digits, sizeof(digits));
 }
 
 /* Clamp a 64-bit physical interval to the address range supported by this
@@ -123,7 +103,7 @@ static int next_mmap_entry(const struct multiboot_info *mbi,
 {
     if (*offset == mbi->mmap_length) return 0;
     if (*offset > mbi->mmap_length || mbi->mmap_length - *offset < 4u)
-        return 0;
+        return -1;
     uint64_t address = (uint64_t)mbi->mmap_addr + *offset;
     if (address + 4u > 0x100000000ULL) return -1;
     const uint8_t *bytes = (const uint8_t *)(uint32_t)address;
@@ -134,6 +114,53 @@ static int next_mmap_entry(const struct multiboot_info *mbi,
         return -1;
     *entry = candidate;
     *offset += payload_size + 4u;
+    return 1;
+}
+
+static int raw_interval(const struct multiboot_mmap_entry *entry,
+                       uint64_t *start, uint64_t *end)
+{
+    if (!entry->length) return 0;
+    *start = entry->address;
+    *end = entry->address + entry->length;
+    if (*end < *start) *end = 0xFFFFFFFFFFFFFFFFULL;
+    return *end > *start;
+}
+
+/* Sweep all map boundaries. Re-reading variable-sized entries avoids a
+ * fixed-size range array and counts overlapping usable regions only once. */
+static int calculate_usable_ram(const struct multiboot_info *mbi,
+                                uint64_t *usable_bytes)
+{
+    uint64_t cursor = 0, total = 0;
+    for (;;) {
+        uint64_t next_boundary = 0xFFFFFFFFFFFFFFFFULL;
+        int covered_usable = 0, covered_reserved = 0;
+        uint32_t offset = 0;
+        const struct multiboot_mmap_entry *entry;
+        int result;
+        while ((result = next_mmap_entry(mbi, &offset, &entry)) > 0) {
+            uint64_t start, end;
+            if (!raw_interval(entry, &start, &end)) continue;
+            if (start <= cursor && cursor < end) {
+                if (entry->type == 1u) covered_usable = 1;
+                else covered_reserved = 1;
+            }
+            if (start > cursor && start < next_boundary)
+                next_boundary = start;
+            if (end > cursor && end < next_boundary)
+                next_boundary = end;
+        }
+        if (result < 0) return 0;
+        if (next_boundary > cursor && covered_usable && !covered_reserved) {
+            uint64_t length = next_boundary - cursor;
+            if (total > 0xFFFFFFFFFFFFFFFFULL - length) return 0;
+            total += length;
+        }
+        if (next_boundary == 0xFFFFFFFFFFFFFFFFULL) break;
+        cursor = next_boundary;
+    }
+    *usable_bytes = total;
     return 1;
 }
 
@@ -184,30 +211,6 @@ static void reserve_multiboot_memory(const struct multiboot_info *mbi)
     reserve_module_ranges(mbi);
 }
 
-static void pmm_print_diagnostics(void)
-{
-    serial_text("PMM Multiboot physical-address span: ");
-    serial_u32(detected_mib);
-    serial_text(" MiB\nPMM usable memory in map: ");
-    serial_u32(usable_mib);
-    serial_text(" MiB\nPMM managed frames: ");
-    serial_u32(managed_frames);
-    serial_text("\nPMM free frames: ");
-    serial_u32(free_frames);
-    serial_text("\nPMM reserved frames: ");
-    serial_u32(managed_frames - free_frames);
-    serial_text("\nPMM bitmap physical=0x");
-    serial_hex32(paging_virtual_to_physical((uint32_t)frame_bitmap));
-    serial_text(" virtual=0x");
-    serial_hex32((uint32_t)frame_bitmap);
-    serial_text("\n");
-    serial_text("PMM ownership bitmap physical=0x");
-    serial_hex32(paging_virtual_to_physical((uint32_t)allocated_bitmap));
-    serial_text(" virtual=0x");
-    serial_hex32((uint32_t)allocated_bitmap);
-    serial_text("\n");
-}
-
 void pmm_init(const struct multiboot_info *mbi)
 {
     for (uint32_t i = 0; i < BITMAP_BYTES; i++) {
@@ -215,11 +218,11 @@ void pmm_init(const struct multiboot_info *mbi)
         allocated_bitmap[i] = 0;
     }
     managed_frames = 0;
+    usable_frames = 0;
     free_frames = 0;
     search_hint = 0;
-    detected_mib = 0;
-    usable_mib = 0;
     memory_map_valid = 0;
+    usable_ram_bytes = 0;
 
     if (!mbi || !(mbi->flags & MULTIBOOT_INFO_MMAP) || !mbi->mmap_length) {
         serial_text("PMM ERROR: Multiboot memory map unavailable; all frames reserved.\n");
@@ -231,25 +234,18 @@ void pmm_init(const struct multiboot_info *mbi)
     }
 
     uint64_t highest_end = 0;
-    uint64_t usable_bytes = 0;
     uint32_t offset = 0;
     const struct multiboot_mmap_entry *entry;
     int result;
     while ((result = next_mmap_entry(mbi, &offset, &entry)) > 0) {
         highest_end = update_max_end(highest_end, entry->address, entry->length);
-        if (entry->type == 1u) {
-            uint64_t start, end;
-            if (clamp_range(entry->address, entry->length, &start, &end)) {
-                uint64_t length = end - start;
-                if (usable_bytes > 0x100000000ULL - length)
-                    usable_bytes = 0x100000000ULL;
-                else
-                    usable_bytes += length;
-            }
-        }
     }
     if (result < 0 || !highest_end) {
         serial_text("PMM ERROR: Invalid or empty Multiboot memory map; all frames reserved.\n");
+        return;
+    }
+    if (!calculate_usable_ram(mbi, &usable_ram_bytes)) {
+        serial_text("PMM ERROR: Unable to calculate usable memory map ranges.\n");
         return;
     }
 
@@ -257,8 +253,6 @@ void pmm_init(const struct multiboot_info *mbi)
         (highest_end + PMM_FRAME_SIZE - 1u) / PMM_FRAME_SIZE;
     if (frame_limit > MAX_FRAMES) frame_limit = MAX_FRAMES;
     managed_frames = (uint32_t)frame_limit;
-    detected_mib = (uint32_t)(highest_end >> 20);
-    usable_mib = (uint32_t)(usable_bytes >> 20);
 
     offset = 0;
     while ((result = next_mmap_entry(mbi, &offset, &entry)) > 0)
@@ -270,7 +264,6 @@ void pmm_init(const struct multiboot_info *mbi)
         serial_text("PMM ERROR: Malformed Multiboot map; allocation disabled.\n");
         return;
     }
-
     /* Apply non-usable records after usable records, then reserve occupied
      * kernel/GRUB/firmware regions explicitly. */
     offset = 0;
@@ -283,6 +276,7 @@ void pmm_init(const struct multiboot_info *mbi)
         serial_text("PMM ERROR: Malformed Multiboot map; allocation disabled.\n");
         return;
     }
+    usable_frames = free_frames;
 
     reserve_range(0, LOW_MEMORY_END);
     uint32_t kernel_start = (uint32_t)&_kernel_phys_start;
@@ -295,7 +289,21 @@ void pmm_init(const struct multiboot_info *mbi)
     reserve_range(paging_virtual_to_physical((uint32_t)allocated_bitmap),
                   sizeof(allocated_bitmap));
     memory_map_valid = 1;
-    pmm_print_diagnostics();
+}
+
+int pmm_is_initialized(void) { return memory_map_valid; }
+
+int pmm_get_stats(pmm_stats_t *stats)
+{
+    if (!stats || !memory_map_valid) return 0;
+    stats->tracked_address_space_bytes =
+        (uint64_t)managed_frames * PMM_FRAME_SIZE;
+    stats->usable_ram_bytes = usable_ram_bytes;
+    stats->managed_frames = managed_frames;
+    stats->usable_frames = usable_frames;
+    stats->free_frames = free_frames;
+    stats->reserved_frames = managed_frames - free_frames;
+    return 1;
 }
 
 uint32_t pmm_alloc_frame(void)

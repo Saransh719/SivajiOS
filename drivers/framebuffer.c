@@ -368,6 +368,9 @@ void fb_write_cell(
     unsigned char bg
 )
 {
+    if (i >= FB_WIDTH * FB_HEIGHT)
+        return;
+
     if (fb_backend == FB_BACKEND_VGA)
     {
         unsigned char attribute =
@@ -433,6 +436,9 @@ void fb_clear(unsigned char fg, unsigned char bg)
 {
     for (unsigned int i = 0; i < FB_WIDTH * FB_HEIGHT; i++)
         fb_write_cell(i, ' ', fg, bg);
+    cursor_row = 0;
+    cursor_col = 0;
+    if (fb_backend == FB_BACKEND_VGA) fb_move_cursor(0);
 }
 
 void fb_write_string(

@@ -63,7 +63,7 @@ efi_status EFIAPI efi_main(void *image_handle,
     }
 
     fb_clear(FB_WHITE, FB_BLACK);
-    fb_write_string("Hello from Nigga OS!",
+    fb_write_string("Hello from sivajiOS!",
                     0, 0, FB_GREEN, FB_BLACK);
     fb_write_string("Framebuffer driver is working!",
                     2, 0, FB_LIGHT_GREY, FB_BLACK);

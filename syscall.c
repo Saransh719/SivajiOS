@@ -1,6 +1,7 @@
 #include "syscall.h"
 #include "usermem.h"
 #include "drivers/serial.h"
+#include "drivers/framebuffer.h"
 
 #define COM1 0x3F8u
 #define COPY_CHUNK 128u
@@ -21,6 +22,7 @@ static int sys_write(uint32_t user_buffer, uint32_t length)
             return written ? (int)written : -(int)SYSCALL_ERR_EFAULT;
         int result = serial_write(COM1, buffer, amount);
         if (result < 0) return written ? (int)written : -1;
+        if (result > 0) (void)fb_write(buffer, (unsigned int)result);
         written += (uint32_t)result;
         if ((uint32_t)result != amount) break;
     }

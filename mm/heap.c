@@ -243,7 +243,31 @@ void heap_init(void)
     block_head = 0;
     mapped_end = HEAP_START;
     heap_initialized = 1;
-    serial_text("Heap initialized: lazy range [0xD0000000, 0xD1000000).\n");
+}
+
+int heap_is_initialized(void) { return heap_initialized; }
+
+int heap_get_stats(struct heap_stats *stats)
+{
+    if (!stats || !heap_initialized) return 0;
+    uint32_t free_bytes = 0, allocated = 0, blocks = 0;
+    struct heap_block *block = block_head, *previous = 0;
+    while (block && blocks < MAX_BLOCKS) {
+        if (!block_valid(block) || block->previous != previous) return 0;
+        if (block->is_free) free_bytes += block->size;
+        else allocated += block->size;
+        previous = block;
+        block = block->next;
+        blocks++;
+    }
+    if (block) return 0;
+    stats->capacity_bytes = HEAP_BYTES;
+    stats->mapped_bytes = mapped_end - HEAP_START;
+    stats->allocated_payload_bytes = allocated;
+    stats->free_payload_bytes = free_bytes;
+    stats->unmapped_bytes = HEAP_END - mapped_end;
+    stats->block_count = blocks;
+    return 1;
 }
 
 void *kmalloc(size_t size)

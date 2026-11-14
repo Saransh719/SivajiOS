@@ -25,5 +25,6 @@ struct tss32 {
 } __attribute__((packed));
 
 void tss_install(void);
+int tss_is_installed(void);
 
 #endif

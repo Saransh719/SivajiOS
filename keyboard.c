@@ -1,12 +1,36 @@
 #include "keyboard.h"
 #include "io/io.h"
 #include "keyboard_map.h"
-#include "drivers/framebuffer.h"
 
 volatile unsigned char keyboard_last_scancode = 0;
 
+#define KEY_QUEUE_SIZE 64u
+static volatile unsigned char key_queue[KEY_QUEUE_SIZE];
+static volatile unsigned char queue_head;
+static volatile unsigned char queue_tail;
+
 static int shift_pressed = 0;
 static int caps_lock = 0;
+
+static void enqueue_key(unsigned char value)
+{
+    unsigned char next = (unsigned char)((queue_head + 1u) % KEY_QUEUE_SIZE);
+    if (next == queue_tail) return; /* Drop newest input rather than corrupting. */
+    key_queue[queue_head] = value;
+    __asm__ volatile ("" ::: "memory");
+    queue_head = next;
+}
+
+int keyboard_read_event(void)
+{
+    if (queue_tail == queue_head) return KEYBOARD_EVENT_NONE;
+    __asm__ volatile ("" ::: "memory");
+    unsigned char value = key_queue[queue_tail];
+    queue_tail = (unsigned char)((queue_tail + 1u) % KEY_QUEUE_SIZE);
+    if (value == '\n') return KEYBOARD_EVENT_ENTER;
+    if (value == '\b') return KEYBOARD_EVENT_BACKSPACE;
+    return value;
+}
 
 static char translate_scancode(unsigned char scancode)
 {
@@ -68,18 +92,9 @@ void keyboard_handler(void)
         return;
     }
 
-    // Backspace.
-    if (scancode == 0x0E) {
-        fb_backspace();
-        return;
-    }
-
     if (scancode >= sizeof(keyboard_map))
         return;
 
     char character = translate_scancode(scancode);
-
-    if (character != 0) {
-        fb_write(&character, 1);
-    }
+    if (character != 0) enqueue_key((unsigned char)character);
 }

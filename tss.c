@@ -2,12 +2,14 @@
 #include "gdt.h"
 
 static struct tss32 kernel_tss;
+static int tss_installed;
 static uint8_t ring0_interrupt_stack[16384] __attribute__((aligned(16)));
 
 typedef char tss32_must_be_104_bytes[sizeof(struct tss32) == 104 ? 1 : -1];
 
 void tss_install(void)
 {
+    tss_installed = 0;
     uint8_t *bytes = (uint8_t *)&kernel_tss;
     for (unsigned int i = 0; i < sizeof(kernel_tss); i++) bytes[i] = 0;
 
@@ -21,4 +23,7 @@ void tss_install(void)
                            sizeof(kernel_tss) - 1u);
     uint16_t selector = GDT_TSS_SELECTOR;
     __asm__ volatile ("ltr %0" :: "r"(selector) : "memory");
+    tss_installed = 1;
 }
+
+int tss_is_installed(void) { return tss_installed; }
